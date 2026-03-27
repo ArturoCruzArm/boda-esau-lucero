@@ -1242,11 +1242,8 @@ function openModal(index) {
     const displayNumber = `Foto ${index + 1}`;
 
     modalPhotoNumber.textContent = displayNumber;
-
-    modalImageContainer.innerHTML = `
-        <img id="modalImage" src="${photo}" alt="${displayNumber}">
-        <div class="modal-photo-number" id="modalPhotoNumber">${displayNumber}</div>
-    `;
+    document.getElementById('modalImage').src = photo;
+    document.getElementById('modalImage').alt = displayNumber;
 
     const selection = photoSelections[index] || {};
     document.querySelectorAll('.option-btn').forEach(btn => {
@@ -1431,15 +1428,7 @@ function copyToClipboard() {
     navigator.clipboard.writeText(summary).then(() => {
         showToast('Resumen copiado al portapapeles', 'success');
     }).catch(() => {
-        const textarea = document.createElement('textarea');
-        textarea.value = summary;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        showToast('Resumen copiado al portapapeles', 'success');
+        showToast('No se pudo copiar. Selecciona el texto manualmente.', 'error');
     });
 }
 
@@ -1541,8 +1530,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    console.log('Selector de fotos inicializado - Boda Esaú González & Lucero Estefania');
-    console.log(`Total de fotos: ${photos.length}`);
 });
 
 // Auto-save on visibility change
