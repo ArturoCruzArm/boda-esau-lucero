@@ -1,119 +1,309 @@
-// selector-sb.js — Supabase sync para Foro 7
+// selector-sb.js - Supabase sync + Realtime para Foro 7
 // Slug: boda-esau-lucero | Storage key: boda_esau_lucero_photo_selections
 (function () {
-    const SUPABASE_URL  = 'https://nzpujmlienzfetqcgsxz.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56cHVqbWxpZW56ZmV0cWNnc3h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODYzMzYsImV4cCI6MjA5MDI2MjMzNn0.xl3lsb-KYj5tVLKTnzpbsdEGoV9ySnswH4eyRuyEH1s';
-    const EVENTO_SLUG   = 'boda-esau-lucero';
-    const SB_KEY        = 'boda_esau_lucero_photo_selections';
-    const SB_H = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' };
+    var SUPABASE_URL  = 'https://nzpujmlienzfetqcgsxz.supabase.co';
+    var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56cHVqbWxpZW56ZmV0cWNnc3h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODYzMzYsImV4cCI6MjA5MDI2MjMzNn0.xl3lsb-KYj5tVLKTnzpbsdEGoV9ySnswH4eyRuyEH1s';
+    var EVENTO_SLUG   = 'boda-esau-lucero';
+    var SB_KEY        = 'boda_esau_lucero_photo_selections';
+    var SB_H = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' };
+    var CURRENT_CODE_VERSION = 4;
 
-    const SESSION_KEY = 'foro7_sid';
-    let sid = localStorage.getItem(SESSION_KEY);
+    var SESSION_KEY = 'foro7_sid';
+    var sid = localStorage.getItem(SESSION_KEY);
     if (!sid) { sid = crypto.randomUUID(); localStorage.setItem(SESSION_KEY, sid); }
 
-    let eventoId   = null;
-    let sbOk       = true;
-    let _syncing   = false;
-    let _syncTimer = null;
+    var eventoId = null;
+    var sbDisponible = true;
+    var _lastSync = 0;
+    var _reloading = false;
+    var CLOCK_KEY = SB_KEY + '_clocks_v1';
+    var clockState = loadClockState();
+
+    function loadClockState() {
+        try { return JSON.parse(localStorage.getItem(CLOCK_KEY) || '{}'); } catch(e) { return {}; }
+    }
+
+    function saveClockState() {
+        try { localStorage.setItem(CLOCK_KEY, JSON.stringify(clockState)); } catch(e) {}
+    }
+
+    function baseSelection(sel) {
+        return {
+            ampliacion: !!(sel && sel.ampliacion),
+            impresion: !!(sel && sel.impresion),
+            invitacion: !!(sel && sel.invitacion),
+            descartada: !!(sel && sel.descartada)
+        };
+    }
+
+    function hasAny(sel) {
+        sel = baseSelection(sel);
+        return sel.ampliacion || sel.impresion || sel.invitacion || sel.descartada;
+    }
+
+    function readMeta(rowOrSelection) {
+        var datos = rowOrSelection && rowOrSelection.datos ? rowOrSelection.datos : rowOrSelection;
+        var meta = datos && datos._sync ? datos._sync : {};
+        return {
+            clock: Number(meta.clock || 0),
+            updatedAt: meta.updatedAt || '',
+            sid: meta.sid || '',
+            deleted: !!meta.deleted
+        };
+    }
+
+    function rememberClock(fotoIndex, clock) {
+        if (!clock) return;
+        var key = String(fotoIndex);
+        clockState[key] = Math.max(Number(clockState[key] || 0), Number(clock || 0));
+    }
+
+    function nextClock(fotoIndex, remoteClock) {
+        clockState = loadClockState();
+        var key = String(fotoIndex);
+        var next = Math.max(Number(clockState[key] || 0), Number(remoteClock || 0)) + 1;
+        clockState[key] = next;
+        saveClockState();
+        return next;
+    }
+
+    function selectionWithMeta(sel, clock, deleted) {
+        var clean = baseSelection(sel);
+        clean._sync = {
+            clock: clock,
+            sid: sid,
+            updatedAt: new Date().toISOString(),
+            deleted: !!deleted
+        };
+        return clean;
+    }
+
+    function rowToSelection(row) {
+        var sel = (row.datos && Object.keys(row.datos).length)
+            ? row.datos
+            : { impresion: row.impresion, invitacion: row.invitacion, descartada: row.descartada, ampliacion: row.ampliacion };
+        return baseSelection(sel);
+    }
 
     async function getEventoId() {
         if (eventoId) return eventoId;
-        const r = await fetch(SUPABASE_URL + '/rest/v1/eventos?slug=eq.' + EVENTO_SLUG + '&select=id&limit=1', { headers: SB_H });
-        const rows = await r.json();
+        var r = await fetch(SUPABASE_URL + '/rest/v1/eventos?slug=eq.' + EVENTO_SLUG + '&select=id&limit=1', { headers: SB_H });
+        var rows = await r.json();
         eventoId = rows[0] ? rows[0].id : null;
         return eventoId;
     }
 
-    async function sbSync(sels) {
-        if (!sbOk) return;
-        try {
-            const eid = await getEventoId();
-            if (!eid) return;
-            await fetch(SUPABASE_URL + '/rest/v1/selecciones?evento_id=eq.' + eid, { method: 'DELETE', headers: SB_H });
-            const entries = Object.entries(sels);
-            if (!entries.length) return;
-            const rows = entries.map(function(e) {
-                var idx = e[0], sel = e[1];
-                return {
-                    evento_id: eid, session_id: sid,
-                    foto_index: parseInt(idx),
-                    impresion:  sel.impresion  || false,
-                    invitacion: sel.invitacion || false,
-                    descartada: sel.descartada || false,
-                    ampliacion: sel.ampliacion || false,
-                    datos: sel
-                };
-            });
-            await fetch(SUPABASE_URL + '/rest/v1/selecciones', {
-                method: 'POST',
-                headers: Object.assign({}, SB_H, { 'Prefer': 'return=minimal' }),
-                body: JSON.stringify(rows)
-            });
-        } catch(e) { sbOk = false; }
+    async function getRemoteSelection(eid, fotoIndex) {
+        var r = await fetch(
+            SUPABASE_URL + '/rest/v1/selecciones?evento_id=eq.' + eid + '&foto_index=eq.' + fotoIndex + '&select=foto_index,datos,impresion,invitacion,descartada,ampliacion&limit=1',
+            { headers: SB_H }
+        );
+        if (!r.ok) return null;
+        var rows = await r.json();
+        return rows[0] || null;
     }
 
-    async function sbLoad(isPoll) {
-        if (!sbOk) return;
-        try {
-            const eid = await getEventoId();
-            if (!eid) return;
-            const r = await fetch(
-                SUPABASE_URL + '/rest/v1/selecciones?evento_id=eq.' + eid + '&select=foto_index,datos,impresion,invitacion,descartada,ampliacion',
-                { headers: SB_H }
-            );
-            const rows = await r.json();
-            const sb = {};
-            rows.forEach(function(row) {
-                var sel = (row.datos && Object.keys(row.datos).length)
-                    ? row.datos
-                    : { impresion: row.impresion, invitacion: row.invitacion, descartada: row.descartada, ampliacion: row.ampliacion };
-                if (Object.values(sel).some(function(v){ return v; })) sb[row.foto_index] = sel;
-            });
+    async function writeRow(row) {
+        _lastSync = Date.now();
+        var r = await fetch(SUPABASE_URL + '/rest/v1/selecciones?on_conflict=evento_id,foto_index', {
+            method: 'POST',
+            headers: Object.assign({}, SB_H, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify([row])
+        });
+        if (!r.ok) throw new Error('UPSERT ' + r.status);
+        _lastSync = Date.now();
+    }
 
-            var merged;
-            if (isPoll) {
-                merged = sb;
-            } else {
-                var local = {};
+    async function sbSaveSelection(fotoIndex, sel) {
+        if (!sbDisponible || !hasAny(sel)) return;
+        try {
+            var eid = await getEventoId();
+            if (!eid) return;
+            var remote = await getRemoteSelection(eid, fotoIndex);
+            var remoteMeta = readMeta(remote);
+            clockState = loadClockState();
+            var localClock = Number(clockState[String(fotoIndex)] || 0);
+
+            if (remoteMeta.clock > localClock && remoteMeta.sid !== sid) {
+                await sbReloadFromDB(eid);
+                return;
+            }
+
+            var clock = nextClock(fotoIndex, remoteMeta.clock);
+            var datos = selectionWithMeta(sel, clock, false);
+            await writeRow({
+                evento_id: eid, session_id: sid, foto_index: fotoIndex,
+                impresion: datos.impresion, invitacion: datos.invitacion,
+                descartada: datos.descartada, ampliacion: datos.ampliacion,
+                datos: datos, code_version: CURRENT_CODE_VERSION
+            });
+        } catch(e) {
+            console.warn('[Supabase] Save error:', e.message);
+        }
+    }
+
+    async function sbUpsertSelections() {
+        if (!sbDisponible) return;
+        var sels = typeof photoSelections !== 'undefined' ? Object.assign({}, photoSelections) : {};
+        Object.entries(sels).forEach(function(e) {
+            var idx = parseInt(e[0], 10);
+            if (hasAny(e[1])) sbSaveSelection(idx, e[1]);
+        });
+    }
+
+    async function sbDeleteSelection(fotoIndex) {
+        if (!sbDisponible) return;
+        try {
+            var eid = await getEventoId();
+            if (!eid) return;
+            var remote = await getRemoteSelection(eid, fotoIndex);
+            var remoteMeta = readMeta(remote);
+            clockState = loadClockState();
+            var localClock = Number(clockState[String(fotoIndex)] || 0);
+
+            if (remoteMeta.clock > localClock && remoteMeta.sid !== sid) {
+                await sbReloadFromDB(eid);
+                return;
+            }
+
+            var clock = nextClock(fotoIndex, remoteMeta.clock);
+            var datos = selectionWithMeta({}, clock, true);
+            await writeRow({
+                evento_id: eid, session_id: sid, foto_index: fotoIndex,
+                impresion: false, invitacion: false,
+                descartada: false, ampliacion: false,
+                datos: datos, code_version: CURRENT_CODE_VERSION
+            });
+        } catch(e) {
+            console.warn('[Supabase] Delete error:', e.message);
+        }
+    }
+
+    async function sbDeleteAll() {
+        if (!sbDisponible) return;
+        try {
+            var eid = await getEventoId();
+            if (!eid) return;
+            var rows = await fetchRows(eid);
+            _lastSync = Date.now();
+            await Promise.all(rows.map(function(row) {
+                return sbDeleteSelection(row.foto_index);
+            }));
+            _lastSync = Date.now();
+        } catch(e) {
+            console.warn('[Supabase] DeleteAll error:', e.message);
+        }
+    }
+
+    function applyRows(rows) {
+        var sb = {};
+        rows.forEach(function(row) {
+            var meta = readMeta(row);
+            rememberClock(row.foto_index, meta.clock);
+            var sel = rowToSelection(row);
+            if (hasAny(sel)) sb[row.foto_index] = sel;
+        });
+        saveClockState();
+        if (typeof photoSelections !== 'undefined') photoSelections = sb;
+        try { localStorage.setItem(SB_KEY, JSON.stringify(sb)); } catch(e) {}
+        if (typeof renderGallery === 'function') renderGallery();
+        if (typeof updateStats === 'function') updateStats();
+        if (typeof updateFilterButtons === 'function') updateFilterButtons();
+        return sb;
+    }
+
+    async function fetchRows(eid) {
+        var r = await fetch(
+            SUPABASE_URL + '/rest/v1/selecciones?evento_id=eq.' + eid + '&select=foto_index,datos,impresion,invitacion,descartada,ampliacion',
+            { headers: SB_H }
+        );
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+    }
+
+    async function sbLoad() {
+        try {
+            var eid = await getEventoId();
+            if (!eid) { sbDisponible = false; return; }
+
+            var rows = await fetchRows(eid);
+            var hasRemoteRows = rows.length > 0;
+            var local = {};
+            if (!hasRemoteRows) {
                 try { local = JSON.parse(localStorage.getItem(SB_KEY) || '{}'); } catch(e) {}
-                merged = Object.assign({}, sb);
-                Object.entries(local).forEach(function(e) {
-                    if (Object.values(e[1]).some(function(v){ return v; })) merged[e[0]] = e[1];
-                });
             }
 
-            _syncing = true;
-            try {
-                localStorage.setItem(SB_KEY, JSON.stringify(merged));
-                if (typeof loadSelections === 'function') loadSelections();
-            } finally { _syncing = false; }
+            var sb = applyRows(rows);
 
-            if (!isPoll) {
-                if (Object.keys(merged).length) sbSync(merged).catch(function(){});
-                sbRegistrarVisita();
-                mostrarBanner(merged);
+            if (!hasRemoteRows && Object.keys(local).length > 0) {
+                photoSelections = local;
+                try { localStorage.setItem(SB_KEY, JSON.stringify(local)); } catch(e) {}
+                if (typeof renderGallery === 'function') renderGallery();
+                if (typeof updateStats === 'function') updateStats();
+                if (typeof updateFilterButtons === 'function') updateFilterButtons();
+                await sbUpsertSelections();
+                sb = local;
             }
-        } catch(e) { sbOk = false; }
+
+            sbRegistrarVisita();
+            mostrarBanner(hasRemoteRows ? sb : (photoSelections || {}));
+            sbSubscribe(eid);
+        } catch(e) {
+            console.warn('[Supabase] Usando localStorage:', e.message);
+            sbDisponible = false;
+        }
     }
 
-    async function sbRegistrarVisita() {
+    function sbSubscribe(eid) {
+        if (!window.supabase || !window.supabase.createClient) return;
         try {
-            const eid = await getEventoId();
+            var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+                auth: { persistSession: false }
+            });
+            client.channel('sel-' + EVENTO_SLUG)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'selecciones',
+                    filter: 'evento_id=eq.' + eid
+                }, function() {
+                    if (Date.now() - _lastSync < 1500) return;
+                    sbReloadFromDB(eid);
+                })
+                .subscribe();
+        } catch(e) { console.warn('[sb] Realtime error:', e); }
+    }
+
+    async function sbReloadFromDB(eid) {
+        if (_reloading) return;
+        _reloading = true;
+        try {
+            eid = eid || await getEventoId();
+            if (!eid) return;
+            var rows = await fetchRows(eid);
+            applyRows(rows);
+        } catch(e) {
+            console.warn('[Supabase] Reload error:', e.message);
+        } finally {
+            _reloading = false;
+        }
+    }
+
+    async function sbRegistrarVisita(pagina) {
+        try {
+            var eid = await getEventoId();
             if (!eid) return;
             await fetch(SUPABASE_URL + '/rest/v1/visitas', {
                 method: 'POST',
                 headers: Object.assign({}, SB_H, { 'Prefer': 'return=minimal' }),
-                body: JSON.stringify({ evento_id: eid, pagina: 'selector', session_id: sid })
+                body: JSON.stringify({ evento_id: eid, pagina: pagina || 'selector', session_id: sid })
             });
         } catch(e) {}
     }
 
     function mostrarBanner(sels) {
         if (document.getElementById('banner-sin-sel')) return;
-        if (Object.keys(sels).length > 0) return;
-        var cfg = window.CONFIG || window.LIMITS || {};
-        var fecha = cfg.fechaEvento || cfg.fecha;
-        if (fecha && new Date(fecha) > new Date()) return;
+        if (Object.keys(sels || {}).length > 0) return;
         var banner = document.createElement('div');
         banner.id = 'banner-sin-sel';
         banner.style.cssText = 'background:#78350f;color:#fcd34d;text-align:center;padding:12px 20px;font-size:.88rem;position:sticky;top:0;z-index:200;line-height:1.5;';
@@ -121,51 +311,18 @@
         document.body.insertBefore(banner, document.body.firstChild);
     }
 
-    // Parchear localStorage para detectar guardados
-    var _origSet = localStorage.setItem.bind(localStorage);
-    localStorage.setItem = function(key, value) {
-        _origSet(key, value);
-        if (key === SB_KEY && !_syncing) {
-            clearTimeout(_syncTimer);
-            _syncTimer = setTimeout(function() {
-                try { sbSync(JSON.parse(value)); } catch(e) {}
-            }, 600);
-        }
-    };
-
-    // Swipe en modal
-    function addSwipe() {
-        var modal = document.getElementById('photoModal') ||
-                    document.querySelector('.photo-modal,.modal-overlay,[id*="modal"],[class*="modal"]');
-        if (!modal || modal._sbSwipe) return;
-        modal._sbSwipe = true;
-        var tx = 0;
-        modal.addEventListener('touchstart', function(e) { tx = e.touches[0].clientX; }, { passive: true });
-        modal.addEventListener('touchend', function(e) {
-            var dx = e.changedTouches[0].clientX - tx;
-            if (Math.abs(dx) < 50) return;
-            var next = document.getElementById('nextPhoto') ||
-                       document.querySelector('[id*="next"],[onclick*="next"],[onclick*="siguiente"],[class*="next"]');
-            if (dx > 0) {
-                var save = document.getElementById('btnGuardar') ||
-                           document.querySelector('[id*="guardar"],[id*="save"],[onclick*="guardar"],[onclick*="save"],[class*="guardar"]');
-                if (save) save.click();
-            } else {
-                var clear = document.getElementById('btnLimpiar') ||
-                            document.querySelector('[id*="limpiar"],[id*="clear"],[onclick*="limpiar"],[onclick*="clear"],[class*="limpiar"]');
-                if (clear) clear.click();
-            }
-            if (next) setTimeout(function(){ next.click(); }, 60);
-        }, { passive: true });
-    }
+    window.sbUpsertSelections = sbUpsertSelections;
+    window.sbSaveSelection = sbSaveSelection;
+    window.sbDeleteSelection = sbDeleteSelection;
+    window.sbDeleteAll = sbDeleteAll;
+    window.sbRegistrarVisita = sbRegistrarVisita;
+    window.sbRefreshSelections = function() { return sbReloadFromDB(); };
+    window.sbDisponible = function() { return sbDisponible; };
 
     document.addEventListener('DOMContentLoaded', function() {
-        sbLoad(false);
+        sbLoad();
         setInterval(function() {
-            var open = window.modalOpen ||
-                document.querySelector('.modal[style*="block"],.modal.active,.modal.show,#photoModal[style*="flex"],#photoModal[style*="block"]');
-            if (!open) sbLoad(true);
+            if (!document.hidden) sbReloadFromDB();
         }, 30000);
-        document.addEventListener('click', function() { setTimeout(addSwipe, 200); }, { passive: true });
     });
 })();

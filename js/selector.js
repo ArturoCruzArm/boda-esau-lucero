@@ -1053,6 +1053,7 @@ function clearAllSelections() {
     if (confirm('¿Estás seguro de que quieres borrar TODAS las selecciones? Esta acción no se puede deshacer.')) {
         photoSelections = {};
         saveSelections();
+        if (typeof sbDeleteAll === 'function') sbDeleteAll();
         renderGallery();
         updateStats();
         updateFilterButtons();
@@ -1306,8 +1307,10 @@ function saveCurrentSelections() {
 
     if (hasAnySelection) {
         photoSelections[currentPhotoIndex] = selectedCategories;
+        if (typeof sbSaveSelection === 'function') sbSaveSelection(currentPhotoIndex, selectedCategories);
     } else {
         delete photoSelections[currentPhotoIndex];
+        if (typeof sbDeleteSelection === 'function') sbDeleteSelection(currentPhotoIndex);
     }
 
     saveSelections();
@@ -1339,8 +1342,10 @@ function saveModalSelection() {
 
     if (hasAnySelection) {
         photoSelections[currentPhotoIndex] = selectedCategories;
+        if (typeof sbSaveSelection === 'function') sbSaveSelection(currentPhotoIndex, selectedCategories);
     } else {
         delete photoSelections[currentPhotoIndex];
+        if (typeof sbDeleteSelection === 'function') sbDeleteSelection(currentPhotoIndex);
     }
 
     saveSelections();
