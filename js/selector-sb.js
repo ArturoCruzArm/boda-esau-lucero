@@ -158,13 +158,6 @@
             if (!eid) return;
             var remote = await getRemoteSelection(eid, fotoIndex);
             var remoteMeta = readMeta(remote);
-            clockState = loadClockState();
-            var localClock = Number(clockState[String(fotoIndex)] || 0);
-
-            if (remoteMeta.clock > localClock && remoteMeta.sid !== sid) {
-                await sbReloadFromDB(eid);
-                return;
-            }
 
             var clock = nextClock(fotoIndex, remoteMeta.clock);
             var datos = selectionWithMeta({}, clock, true);
