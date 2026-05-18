@@ -81,7 +81,7 @@
                 evento_id: eid, session_id: sid, foto_index: fotoIndex,
                 impresion: clean.impresion, invitacion: clean.invitacion,
                 descartada: clean.descartada, ampliacion: clean.ampliacion,
-                datos: clean
+                datos: clean, code_version: 5
             });
         } catch(e) { console.warn('[sb] save:', e.message); }
     }
@@ -97,7 +97,7 @@
             await writeRow({
                 evento_id: eid, session_id: sid, foto_index: fotoIndex,
                 impresion: false, invitacion: false, descartada: false, ampliacion: false,
-                datos: datos
+                datos: datos, code_version: 5
             });
         } catch(e) { console.warn('[sb] delete:', e.message); }
     }
