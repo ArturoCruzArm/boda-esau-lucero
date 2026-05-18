@@ -191,14 +191,14 @@
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'selecciones',
-                    filter: 'evento_id=eq.' + eid
+                    table: 'selecciones'
                 }, function(payload) {
-                    console.log('[sb] Realtime evento:', payload.eventType, 'foto:', (payload.new||{}).foto_index);
-                    if (Date.now() - _lastWrite < 2000) { console.log('[sb] ignorado (write propio por tiempo)'); return; }
+                    console.log('[sb] Realtime evento:', payload.eventType, 'foto:', (payload.new||{}).foto_index, 'evento_id:', (payload.new||{}).evento_id);
                     var row = payload.new || payload.old;
-                    if (row && row.session_id === sid) { console.log('[sb] ignorado (mismo sid)'); return; }
-                    if (row) applyOneRow(row);
+                    if (!row || row.evento_id !== eid) { console.log('[sb] ignorado (otro evento)'); return; }
+                    if (Date.now() - _lastWrite < 2000) { console.log('[sb] ignorado (write propio por tiempo)'); return; }
+                    if (row.session_id === sid) { console.log('[sb] ignorado (mismo sid)'); return; }
+                    applyOneRow(row);
                 })
                 .subscribe(function(status) {
                     console.log('[sb] Realtime status:', status);
