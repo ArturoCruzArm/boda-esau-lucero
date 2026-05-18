@@ -1,6 +1,6 @@
-// selector-sb.js - Supabase sync + Realtime para Foro 7
+// selector-sb.js - Supabase sync + Broadcast Realtime para Foro 7
 // Slug: boda-esau-lucero | Storage key: boda_esau_lucero_photo_selections
-// v5: Solo Realtime (sin polling), escritura directa sin pre-fetch
+// v9: Broadcast (cliente-a-cliente) en vez de postgres_changes
 (function () {
     var SUPABASE_URL  = 'https://nzpujmlienzfetqcgsxz.supabase.co';
     var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56cHVqbWxpZW56ZmV0cWNnc3h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODYzMzYsImV4cCI6MjA5MDI2MjMzNn0.xl3lsb-KYj5tVLKTnzpbsdEGoV9ySnswH4eyRuyEH1s';
@@ -14,42 +14,35 @@
 
     var eventoId = null;
     var sbDisponible = true;
-    var _lastWrite = 0;
+    var channel = null;
 
     // --- Clock helpers ---
     var CLOCK_KEY = SB_KEY + '_clock';
-    function getClock(fotoIndex) {
-        try { var c = JSON.parse(localStorage.getItem(CLOCK_KEY) || '{}'); return Number(c[String(fotoIndex)] || 0); } catch(e) { return 0; }
+    function getClock(fi) {
+        try { return Number((JSON.parse(localStorage.getItem(CLOCK_KEY) || '{}'))[String(fi)] || 0); } catch(e) { return 0; }
     }
-    function setClock(fotoIndex, val) {
-        try {
-            var c = JSON.parse(localStorage.getItem(CLOCK_KEY) || '{}');
-            c[String(fotoIndex)] = val;
-            localStorage.setItem(CLOCK_KEY, JSON.stringify(c));
-        } catch(e) {}
+    function setClock(fi, val) {
+        try { var c = JSON.parse(localStorage.getItem(CLOCK_KEY) || '{}'); c[String(fi)] = val; localStorage.setItem(CLOCK_KEY, JSON.stringify(c)); } catch(e) {}
     }
-    function bumpClock(fotoIndex) {
-        var next = getClock(fotoIndex) + 1;
-        setClock(fotoIndex, next);
-        return next;
-    }
+    function bumpClock(fi) { var n = getClock(fi) + 1; setClock(fi, n); return n; }
 
     // --- Helpers ---
-    function baseSelection(sel) {
-        return {
-            ampliacion: !!(sel && sel.ampliacion),
-            impresion: !!(sel && sel.impresion),
-            invitacion: !!(sel && sel.invitacion),
-            descartada: !!(sel && sel.descartada)
-        };
+    function base(sel) {
+        return { ampliacion: !!(sel&&sel.ampliacion), impresion: !!(sel&&sel.impresion), invitacion: !!(sel&&sel.invitacion), descartada: !!(sel&&sel.descartada) };
+    }
+    function hasAny(sel) { var s = base(sel); return s.ampliacion||s.impresion||s.invitacion||s.descartada; }
+
+    // --- Broadcast: enviar cambio a otros navegadores ---
+    function broadcast(type, fotoIndex, sel, clock) {
+        if (!channel) return;
+        channel.send({
+            type: 'broadcast',
+            event: 'sync',
+            payload: { sid: sid, type: type, foto_index: fotoIndex, sel: sel, clock: clock }
+        });
     }
 
-    function hasAny(sel) {
-        var s = baseSelection(sel);
-        return s.ampliacion || s.impresion || s.invitacion || s.descartada;
-    }
-
-    // --- Supabase ---
+    // --- Supabase REST ---
     async function getEventoId() {
         if (eventoId) return eventoId;
         var r = await fetch(SUPABASE_URL + '/rest/v1/eventos?slug=eq.' + EVENTO_SLUG + '&select=id&limit=1', { headers: SB_H });
@@ -59,7 +52,6 @@
     }
 
     async function writeRow(row) {
-        _lastWrite = Date.now();
         var r = await fetch(SUPABASE_URL + '/rest/v1/selecciones?on_conflict=evento_id,foto_index', {
             method: 'POST',
             headers: Object.assign({}, SB_H, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
@@ -68,14 +60,14 @@
         if (!r.ok) throw new Error('UPSERT ' + r.status);
     }
 
-    // --- Escritura directa (sin pre-fetch) ---
+    // --- Save / Delete ---
     async function sbSaveSelection(fotoIndex, sel) {
         if (!sbDisponible || !hasAny(sel)) return;
         try {
             var eid = await getEventoId();
             if (!eid) return;
             var clock = bumpClock(fotoIndex);
-            var clean = baseSelection(sel);
+            var clean = base(sel);
             clean._sync = { clock: clock, sid: sid, updatedAt: new Date().toISOString(), deleted: false };
             await writeRow({
                 evento_id: eid, session_id: sid, foto_index: fotoIndex,
@@ -83,6 +75,7 @@
                 descartada: clean.descartada, ampliacion: clean.ampliacion,
                 datos: clean, code_version: 5
             });
+            broadcast('save', fotoIndex, base(sel), clock);
         } catch(e) { console.warn('[sb] save:', e.message); }
     }
 
@@ -92,23 +85,21 @@
             var eid = await getEventoId();
             if (!eid) return;
             var clock = bumpClock(fotoIndex);
-            var datos = baseSelection({});
+            var datos = base({});
             datos._sync = { clock: clock, sid: sid, updatedAt: new Date().toISOString(), deleted: true };
             await writeRow({
                 evento_id: eid, session_id: sid, foto_index: fotoIndex,
                 impresion: false, invitacion: false, descartada: false, ampliacion: false,
                 datos: datos, code_version: 5
             });
+            broadcast('delete', fotoIndex, null, clock);
         } catch(e) { console.warn('[sb] delete:', e.message); }
     }
 
     async function sbDeleteAll() {
         if (!sbDisponible) return;
         try {
-            var eid = await getEventoId();
-            if (!eid) return;
             var keys = Object.keys(typeof photoSelections !== 'undefined' ? photoSelections : {});
-            _lastWrite = Date.now();
             await Promise.all(keys.map(function(k) { return sbDeleteSelection(parseInt(k, 10)); }));
         } catch(e) { console.warn('[sb] deleteAll:', e.message); }
     }
@@ -126,9 +117,7 @@
     function applyRows(rows) {
         var sb = {};
         rows.forEach(function(row) {
-            var sel = (row.datos && typeof row.datos === 'object')
-                ? baseSelection(row.datos)
-                : baseSelection(row);
+            var sel = (row.datos && typeof row.datos === 'object') ? base(row.datos) : base(row);
             var meta = (row.datos && row.datos._sync) || {};
             if (meta.clock) setClock(row.foto_index, Math.max(getClock(row.foto_index), Number(meta.clock)));
             if (hasAny(sel)) sb[row.foto_index] = sel;
@@ -141,20 +130,15 @@
         return sb;
     }
 
-    // Aplicar UN solo cambio entrante (Realtime)
-    function applyOneRow(row) {
-        if (!row || row.foto_index === undefined) return;
-        var sel = (row.datos && typeof row.datos === 'object')
-            ? baseSelection(row.datos)
-            : baseSelection(row);
-        var meta = (row.datos && row.datos._sync) || {};
-        if (meta.clock) setClock(row.foto_index, Math.max(getClock(row.foto_index), Number(meta.clock)));
-
+    // Aplicar un cambio entrante (del broadcast)
+    function applyChange(data) {
         if (typeof photoSelections === 'undefined') return;
-        if (hasAny(sel)) {
-            photoSelections[row.foto_index] = sel;
+        var fi = data.foto_index;
+        if (data.clock) setClock(fi, Math.max(getClock(fi), Number(data.clock)));
+        if (data.type === 'save' && data.sel && hasAny(data.sel)) {
+            photoSelections[fi] = base(data.sel);
         } else {
-            delete photoSelections[row.foto_index];
+            delete photoSelections[fi];
         }
         try { localStorage.setItem(SB_KEY, JSON.stringify(photoSelections)); } catch(e) {}
         if (typeof renderGallery === 'function') renderGallery();
@@ -162,7 +146,7 @@
         if (typeof updateFilterButtons === 'function') updateFilterButtons();
     }
 
-    // --- Fetch completo (solo al cargar y al volver de background) ---
+    // --- Fetch completo (al cargar y al volver de background) ---
     async function fetchAndApply() {
         try {
             var eid = await getEventoId();
@@ -172,38 +156,30 @@
                 { headers: SB_H }
             );
             if (!r.ok) throw new Error(r.status);
-            var rows = await r.json();
-            applyRows(rows);
+            applyRows(await r.json());
         } catch(e) { console.warn('[sb] fetch:', e.message); }
     }
 
-    // --- Realtime: escuchar cambios individuales ---
-    function sbSubscribe(eid) {
+    // --- Canal Broadcast ---
+    function sbSubscribe() {
         if (!window.supabase || !window.supabase.createClient) {
-            console.warn('[sb] SDK no disponible, sin Realtime');
+            console.warn('[sb] SDK no disponible');
             return;
         }
         try {
             var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
                 auth: { persistSession: false }
             });
-            client.channel('sel-' + EVENTO_SLUG)
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'selecciones'
-                }, function(payload) {
-                    console.log('[sb] Realtime evento:', payload.eventType, 'foto:', (payload.new||{}).foto_index, 'evento_id:', (payload.new||{}).evento_id);
-                    var row = payload.new || payload.old;
-                    if (!row || row.evento_id !== eid) { console.log('[sb] ignorado (otro evento)'); return; }
-                    if (Date.now() - _lastWrite < 2000) { console.log('[sb] ignorado (write propio por tiempo)'); return; }
-                    if (row.session_id === sid) { console.log('[sb] ignorado (mismo sid)'); return; }
-                    applyOneRow(row);
+            channel = client.channel('foto-' + EVENTO_SLUG)
+                .on('broadcast', { event: 'sync' }, function(msg) {
+                    var data = msg.payload;
+                    if (!data || data.sid === sid) return;
+                    applyChange(data);
                 })
                 .subscribe(function(status) {
-                    console.log('[sb] Realtime status:', status);
+                    console.log('[sb] Broadcast:', status);
                 });
-        } catch(e) { console.warn('[sb] Realtime error:', e); }
+        } catch(e) { console.warn('[sb] Broadcast error:', e); }
     }
 
     // --- Carga inicial ---
@@ -218,12 +194,10 @@
             );
             if (!r.ok) throw new Error(r.status);
             var rows = await r.json();
-            var hasRemote = rows.length > 0;
 
-            if (hasRemote) {
+            if (rows.length > 0) {
                 applyRows(rows);
             } else {
-                // Si no hay nada en BD pero hay local, subir
                 var local = {};
                 try { local = JSON.parse(localStorage.getItem(SB_KEY) || '{}'); } catch(e) {}
                 if (Object.keys(local).length > 0) {
@@ -235,15 +209,15 @@
             }
 
             mostrarBanner(photoSelections || {});
-            sbSubscribe(eid);
+            sbSubscribe();
             sbRegistrarVisita();
         } catch(e) {
-            console.warn('[sb] Init error, usando localStorage:', e.message);
+            console.warn('[sb] Init error:', e.message);
             sbDisponible = false;
         }
     }
 
-    // --- Visibilitychange: al volver, sincronizar una vez ---
+    // Al volver de background, sincronizar una vez desde BD
     document.addEventListener('visibilitychange', function() {
         if (!document.hidden && sbDisponible) fetchAndApply();
     });
