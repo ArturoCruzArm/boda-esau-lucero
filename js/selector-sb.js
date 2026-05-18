@@ -179,7 +179,10 @@
 
     // --- Realtime: escuchar cambios individuales ---
     function sbSubscribe(eid) {
-        if (!window.supabase || !window.supabase.createClient) return;
+        if (!window.supabase || !window.supabase.createClient) {
+            console.warn('[sb] SDK no disponible, sin Realtime');
+            return;
+        }
         try {
             var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
                 auth: { persistSession: false }
@@ -191,14 +194,15 @@
                     table: 'selecciones',
                     filter: 'evento_id=eq.' + eid
                 }, function(payload) {
-                    // Ignorar mis propios writes
-                    if (Date.now() - _lastWrite < 2000) return;
+                    console.log('[sb] Realtime evento:', payload.eventType, 'foto:', (payload.new||{}).foto_index);
+                    if (Date.now() - _lastWrite < 2000) { console.log('[sb] ignorado (write propio por tiempo)'); return; }
                     var row = payload.new || payload.old;
-                    if (row && row.session_id === sid) return;
-                    // Aplicar cambio individual
+                    if (row && row.session_id === sid) { console.log('[sb] ignorado (mismo sid)'); return; }
                     if (row) applyOneRow(row);
                 })
-                .subscribe();
+                .subscribe(function(status) {
+                    console.log('[sb] Realtime status:', status);
+                });
         } catch(e) { console.warn('[sb] Realtime error:', e); }
     }
 
