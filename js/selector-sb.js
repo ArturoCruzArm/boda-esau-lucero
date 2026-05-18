@@ -1,6 +1,7 @@
 // selector-sb.js - Supabase sync + Broadcast Realtime para Foro 7
 // Slug: boda-esau-lucero | Storage key: boda_esau_lucero_photo_selections
-// v9: Broadcast (cliente-a-cliente) en vez de postgres_changes
+// v11: Debug completo
+console.log('[sb] selector-sb.js v11 cargado');
 (function () {
     var SUPABASE_URL  = 'https://nzpujmlienzfetqcgsxz.supabase.co';
     var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56cHVqbWxpZW56ZmV0cWNnc3h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODYzMzYsImV4cCI6MjA5MDI2MjMzNn0.xl3lsb-KYj5tVLKTnzpbsdEGoV9ySnswH4eyRuyEH1s';
