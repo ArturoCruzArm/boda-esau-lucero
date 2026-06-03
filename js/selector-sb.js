@@ -1,7 +1,6 @@
 // selector-sb.js - Supabase sync + Broadcast Realtime para Foro 7
 // Slug: boda-esau-lucero | Storage key: boda_esau_lucero_photo_selections
-// v11: Debug completo
-console.log('[sb] selector-sb.js v11 cargado');
+// v12: Broadcast sync (producción)
 (function () {
     var SUPABASE_URL  = 'https://nzpujmlienzfetqcgsxz.supabase.co';
     var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56cHVqbWxpZW56ZmV0cWNnc3h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODYzMzYsImV4cCI6MjA5MDI2MjMzNn0.xl3lsb-KYj5tVLKTnzpbsdEGoV9ySnswH4eyRuyEH1s';
@@ -35,17 +34,12 @@ console.log('[sb] selector-sb.js v11 cargado');
 
     // --- Broadcast: enviar cambio a otros navegadores ---
     function broadcast(type, fotoIndex, sel, clock) {
-        if (!channel) { console.warn('[sb] broadcast: no channel'); return; }
-        console.log('[sb] enviando broadcast:', type, 'foto:', fotoIndex);
+        if (!channel) return;
         channel.send({
             type: 'broadcast',
             event: 'sync',
             payload: { sid: sid, type: type, foto_index: fotoIndex, sel: sel, clock: clock }
-        }).then(function(res) {
-            console.log('[sb] broadcast enviado:', res);
-        }).catch(function(e) {
-            console.warn('[sb] broadcast error:', e);
-        });
+        }).catch(function() {});
     }
 
     // --- Supabase REST ---
@@ -68,43 +62,37 @@ console.log('[sb] selector-sb.js v11 cargado');
 
     // --- Save / Delete ---
     async function sbSaveSelection(fotoIndex, sel) {
-        console.log('[sb] sbSaveSelection llamado:', fotoIndex, JSON.stringify(sel));
-        if (!sbDisponible) { console.warn('[sb] no disponible'); return; }
-        if (!hasAny(sel)) { console.warn('[sb] sel vacía, ignorando'); return; }
+        if (!sbDisponible) return;
+        if (!hasAny(sel)) return;
         try {
             var eid = await getEventoId();
-            if (!eid) { console.warn('[sb] no eventoId'); return; }
+            if (!eid) return;
             var clock = bumpClock(fotoIndex);
             var clean = base(sel);
             clean._sync = { clock: clock, sid: sid, updatedAt: new Date().toISOString(), deleted: false };
-            console.log('[sb] escribiendo a BD foto:', fotoIndex, 'clock:', clock);
             await writeRow({
                 evento_id: eid, session_id: sid, foto_index: fotoIndex,
                 impresion: clean.impresion, invitacion: clean.invitacion,
                 descartada: clean.descartada, ampliacion: clean.ampliacion,
                 datos: clean, code_version: 5
             });
-            console.log('[sb] BD OK, enviando broadcast');
             broadcast('save', fotoIndex, base(sel), clock);
         } catch(e) { console.warn('[sb] save error:', e.message); }
     }
 
     async function sbDeleteSelection(fotoIndex) {
-        console.log('[sb] sbDeleteSelection llamado:', fotoIndex);
-        if (!sbDisponible) { console.warn('[sb] no disponible'); return; }
+        if (!sbDisponible) return;
         try {
             var eid = await getEventoId();
-            if (!eid) { console.warn('[sb] no eventoId'); return; }
+            if (!eid) return;
             var clock = bumpClock(fotoIndex);
             var datos = base({});
             datos._sync = { clock: clock, sid: sid, updatedAt: new Date().toISOString(), deleted: true };
-            console.log('[sb] delete escribiendo a BD foto:', fotoIndex, 'clock:', clock);
             await writeRow({
                 evento_id: eid, session_id: sid, foto_index: fotoIndex,
                 impresion: false, invitacion: false, descartada: false, ampliacion: false,
                 datos: datos, code_version: 5
             });
-            console.log('[sb] delete BD OK, enviando broadcast');
             broadcast('delete', fotoIndex, null, clock);
         } catch(e) { console.warn('[sb] delete error:', e.message); }
     }
@@ -175,26 +163,19 @@ console.log('[sb] selector-sb.js v11 cargado');
 
     // --- Canal Broadcast ---
     function sbSubscribe() {
-        if (!window.supabase || !window.supabase.createClient) {
-            console.warn('[sb] SDK no disponible');
-            return;
-        }
+        if (!window.supabase || !window.supabase.createClient) return;
         try {
             var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
                 auth: { persistSession: false }
             });
             channel = client.channel('foto-' + EVENTO_SLUG)
                 .on('broadcast', { event: 'sync' }, function(msg) {
-                    console.log('[sb] recibido broadcast:', JSON.stringify(msg));
                     var data = msg.payload;
-                    if (!data) { console.log('[sb] payload vacío'); return; }
-                    if (data.sid === sid) { console.log('[sb] ignorado (mismo sid)'); return; }
-                    console.log('[sb] aplicando cambio foto:', data.foto_index, data.type);
+                    if (!data) return;
+                    if (data.sid === sid) return;
                     applyChange(data);
                 })
-                .subscribe(function(status) {
-                    console.log('[sb] Broadcast:', status);
-                });
+                .subscribe();
         } catch(e) { console.warn('[sb] Broadcast error:', e); }
     }
 

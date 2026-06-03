@@ -1305,18 +1305,12 @@ function saveCurrentSelections() {
         if (isSelected) hasAnySelection = true;
     });
 
-    console.log('[selector] saveCurrentSelections foto:', currentPhotoIndex, 'hasAny:', hasAnySelection, 'cats:', JSON.stringify(selectedCategories));
-    console.log('[selector] typeof sbSaveSelection:', typeof sbSaveSelection);
     if (hasAnySelection) {
         photoSelections[currentPhotoIndex] = selectedCategories;
-        console.log('[selector] llamando sbSaveSelection(' + currentPhotoIndex + ')');
         if (typeof sbSaveSelection === 'function') sbSaveSelection(currentPhotoIndex, selectedCategories);
-        else console.warn('[selector] sbSaveSelection NO es función');
     } else {
         delete photoSelections[currentPhotoIndex];
-        console.log('[selector] llamando sbDeleteSelection(' + currentPhotoIndex + ')');
         if (typeof sbDeleteSelection === 'function') sbDeleteSelection(currentPhotoIndex);
-        else console.warn('[selector] sbDeleteSelection NO es función');
     }
 
     saveSelections();
@@ -1346,18 +1340,12 @@ function saveModalSelection() {
         if (isSelected) hasAnySelection = true;
     });
 
-    console.log('[selector] saveModalSelection foto:', currentPhotoIndex, 'hasAny:', hasAnySelection, 'cats:', JSON.stringify(selectedCategories));
-    console.log('[selector] typeof sbSaveSelection:', typeof sbSaveSelection, 'typeof sbDeleteSelection:', typeof sbDeleteSelection);
     if (hasAnySelection) {
         photoSelections[currentPhotoIndex] = selectedCategories;
-        console.log('[selector] llamando sbSaveSelection(' + currentPhotoIndex + ')');
         if (typeof sbSaveSelection === 'function') sbSaveSelection(currentPhotoIndex, selectedCategories);
-        else console.warn('[selector] sbSaveSelection NO es función');
     } else {
         delete photoSelections[currentPhotoIndex];
-        console.log('[selector] llamando sbDeleteSelection(' + currentPhotoIndex + ')');
         if (typeof sbDeleteSelection === 'function') sbDeleteSelection(currentPhotoIndex);
-        else console.warn('[selector] sbDeleteSelection NO es función');
     }
 
     saveSelections();
