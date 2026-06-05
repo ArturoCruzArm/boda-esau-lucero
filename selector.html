@@ -12,11 +12,123 @@
     <link rel="stylesheet" href="css/selector.css">
 </head>
 <body>
-    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;font-family:'Playfair Display',serif;text-align:center;padding:2rem;">
-        <div style="font-size:4rem;margin-bottom:1rem;">🔧</div>
-        <h1 style="font-size:2rem;margin-bottom:0.5rem;">En Mantenimiento</h1>
-        <p style="font-size:1.1rem;color:#ccc;max-width:400px;line-height:1.6;">El selector de fotos no se encuentra disponible por el momento. Disculpe las molestias.</p>
-        <p style="margin-top:2rem;font-size:0.9rem;color:#888;">Hasta nuevo aviso</p>
+    <header class="header">
+        <h1 class="main-title">Esaú González & Lucero Estefania</h1>
+        <p class="subtitle">Boda</p>
+        <p class="instructions">Selecciona las fotos para impresión</p>
+    </header>
+
+    <div class="container">
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <div class="stats-row">
+                <div class="stat-card impresion">
+                    <span class="stat-icon">📸</span>
+                    <div class="stat-info">
+                        <h3>Impresión</h3>
+                        <span class="stat-count" id="countImpresion">0/200</span>
+                    </div>
+                </div>
+                <div class="stat-card invitacion">
+                    <span class="stat-icon">💌</span>
+                    <div class="stat-info">
+                        <h3>Álbum</h3>
+                        <span class="stat-count" id="countInvitacion">0</span>
+                    </div>
+                </div>
+                <div class="stat-card descartada">
+                    <span class="stat-icon">❌</span>
+                    <div class="stat-info">
+                        <h3>Descartadas</h3>
+                        <span class="stat-count" id="countDescartada">0</span>
+                    </div>
+                </div>
+                <div class="stat-card sin-clasificar">
+                    <span class="stat-icon">⭕</span>
+                    <div class="stat-info">
+                        <h3>Sin Clasificar</h3>
+                        <span class="stat-count" id="countSinClasificar">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-filter active" id="btnFilterAll" data-filter="all">Todas</button>
+                <button class="btn btn-filter filter-impresion" id="btnFilterImpresion" data-filter="impresion">Impresión</button>
+                <button class="btn btn-filter filter-invitacion" id="btnFilterInvitacion" data-filter="invitacion">Álbum</button>
+                <button class="btn btn-filter filter-descartada" id="btnFilterDescartada" data-filter="descartada">Descartadas</button>
+                <button class="btn btn-filter filter-sin-clasificar" id="btnFilterSinClasificar" data-filter="sin-clasificar">Sin Clasificar</button>
+            </div>
+
+            <div class="action-buttons secondary">
+                <button class="btn btn-export" id="btnExport"><i class="fas fa-download"></i> Descargar Reporte</button>
+                <button class="btn btn-share" id="btnShare"><i class="fas fa-copy"></i> Copiar Resumen</button>
+                <button class="btn btn-clear" id="btnClear"><i class="fas fa-trash"></i> Limpiar Todo</button>
+            </div>
+        </div>
+
+        <!-- Gallery Section -->
+        <section class="gallery-section">
+            <div class="photos-grid" id="photosGrid">
+                <!-- Photos will be loaded here by JavaScript -->
+            </div>
+        </section>
     </div>
+
+    <!-- Modal -->
+    <div class="modal" id="photoModal">
+        <!-- Botones fuera del scroll para que siempre sean visibles en iOS -->
+        <button class="modal-nav-btn modal-prev" id="btnPrevPhoto">&#10094;</button>
+        <button class="modal-nav-btn modal-next" id="btnNextPhoto">&#10095;</button>
+
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+
+            <div class="modal-body">
+                <div class="modal-image-container">
+                    <img id="modalImage" src="" alt="Foto seleccionada">
+                    <div class="modal-photo-number" id="modalPhotoNumber"></div>
+                </div>
+
+                <div class="modal-options">
+                    <h3>Clasificar esta foto</h3>
+                    <p class="modal-subtitle">Selecciona las categorías para esta imagen</p>
+
+                    <div class="option-buttons">
+                        <button class="option-btn impresion" data-category="impresion">
+                            <span class="option-icon">📸</span>
+                            <span class="option-text">Impresión (5x7)</span>
+                            <span class="option-check">✓</span>
+                        </button>
+
+                        <button class="option-btn invitacion" data-category="invitacion">
+                            <span class="option-icon">💒</span>
+                            <span class="option-text">Para Álbum</span>
+                            <span class="option-check">✓</span>
+                        </button>
+
+                        <button class="option-btn descartada" data-category="descartada">
+                            <span class="option-icon">❌</span>
+                            <span class="option-text">Descartar</span>
+                            <span class="option-check">✓</span>
+                        </button>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn btn-cancel" id="btnCancelSelection">Cancelar</button>
+                        <button class="btn btn-save" id="btnSaveSelection">Guardar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="js/supabase.min.js"></script>
+    <script src="js/selector.js?v=2"></script>
+    <script src="js/selector-sb.js?v=11"></script>
+<script src="js/foro7-footer.js"></script>
 </body>
 </html>
