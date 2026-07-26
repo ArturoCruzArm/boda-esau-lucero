@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0d1b26">
+  <meta name="description" content="Álbum digital de la boda de Esaú y Lucero.">
+  <title>Esaú & Lucero — 21·03·2026</title>
+  <link rel="icon" href="thumb/DSC_3201.webp?v=20260726-2">
+  <link rel="stylesheet" href="album.css?v=20260726-2">
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+
+  <header class="hero" id="inicio">
+    <img class="hero__image" src="DSC_3201.webp?v=20260726-2" alt="Esaú y Lucero el día de su boda">
+    <div class="hero__veil"></div>
+    <nav class="topbar" aria-label="Navegación principal">
+      <a class="monogram" href="#inicio" aria-label="Volver al inicio">E<span>·</span>L</a>
+      <div class="topbar__actions">
+        <button class="round-button" id="soundToggle" type="button" aria-label="Activar ambiente visual" title="Ambiente visual">
+          <span aria-hidden="true">✦</span>
+        </button>
+        <button class="round-button" id="themeToggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+          <span aria-hidden="true">◐</span>
+        </button>
+      </div>
+    </nav>
+    <div class="hero__content">
+      <p class="eyebrow">21 de marzo de 2026 · México</p>
+      <h1><span>Esaú</span><i>&</i><span>Lucero</span></h1>
+      <p class="hero__note">Un día, cien instantes, una vida por recordar.</p>
+      <a class="enter" href="#galeria">Ver la historia <span aria-hidden="true">↓</span></a>
+    </div>
+    <div class="hero__index" aria-hidden="true">
+      <span>Álbum</span>
+      <strong>101</strong>
+      <span>recuerdos</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="intro-title">
+      <p class="intro__aside">Una celebración<br>contada en imágenes</p>
+      <div>
+        <p class="eyebrow eyebrow--dark">Nuestra historia</p>
+        <h2 id="intro-title">Donde el tiempo<br><em>decidió quedarse.</em></h2>
+        <p class="intro__copy">Desde la calma de la ceremonia hasta las luces de la última canción. Explora, guarda tus favoritas y vuelve a vivir cada momento.</p>
+      </div>
+      <blockquote>“Que todos los días<br>se sientan un poco<br>como este.”</blockquote>
+    </section>
+
+    <section class="gallery-section" id="galeria" aria-labelledby="gallery-title">
+      <div class="gallery-heading">
+        <div>
+          <p class="eyebrow eyebrow--gold">El álbum completo</p>
+          <h2 id="gallery-title">Los recuerdos</h2>
+        </div>
+        <div class="gallery-count"><strong id="visibleCount">101</strong><span>fotografías</span></div>
+      </div>
+
+      <div class="controls" aria-label="Controles de la galería">
+        <div class="filters" role="group" aria-label="Filtrar fotografías">
+          <button class="filter is-active" data-filter="all" type="button">Todas</button>
+          <button class="filter" data-filter="ceremony" type="button">Ceremonia</button>
+          <button class="filter" data-filter="party" type="button">Celebración</button>
+          <button class="filter" data-filter="favorites" type="button">Favoritas <span id="favoriteCount">0</span></button>
+        </div>
+        <label class="search">
+          <span class="sr-only">Buscar por número de fotografía</span>
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" placeholder="Buscar foto…" autocomplete="off">
+        </label>
+        <button class="slideshow-button" id="startSlideshow" type="button"><span aria-hidden="true">▷</span> Presentación</button>
+      </div>
+
+      <div class="gallery" id="gallery" aria-live="polite"></div>
+      <div class="empty" id="emptyState" hidden>
+        <span>◇</span>
+        <h3>No encontramos esa fotografía</h3>
+        <p>Prueba con otro número o vuelve a ver todas.</p>
+        <button type="button" id="resetFilters">Mostrar todas</button>
+      </div>
+    </section>
+
+    <section class="closing">
+      <div class="closing__photo"><img src="DSC_3283.webp?v=20260726-2" alt="" loading="lazy"></div>
+      <div class="closing__copy">
+        <p class="eyebrow eyebrow--gold">Y esto apenas comienza</p>
+        <h2>Para siempre<br><em>empieza aquí.</em></h2>
+        <a href="#inicio">Volver al comienzo ↑</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>E <i>·</i> L</span>
+    <p>21 · 03 · 2026</p>
+    <p>Hecho para recordar</p>
+  </footer>
+
+  <dialog class="lightbox" id="lightbox" aria-label="Visor de fotografía">
+    <div class="lightbox__backdrop"></div>
+    <header class="lightbox__header">
+      <div><span id="lightboxIndex">01</span><i>/</i><span id="lightboxTotal">101</span></div>
+      <div class="lightbox__tools">
+        <button type="button" id="zoomButton" aria-label="Ampliar fotografía" title="Ampliar">＋</button>
+        <button type="button" id="favoriteButton" aria-label="Marcar como favorita" title="Favorita">♡</button>
+        <a id="downloadButton" download aria-label="Descargar fotografía" title="Descargar">↓</a>
+        <button type="button" id="shareButton" aria-label="Compartir fotografía" title="Compartir">↗</button>
+        <button type="button" id="closeLightbox" aria-label="Cerrar visor" title="Cerrar">×</button>
+      </div>
+    </header>
+    <button class="lightbox__nav lightbox__nav--prev" id="prevPhoto" type="button" aria-label="Fotografía anterior">‹</button>
+    <figure class="lightbox__figure">
+      <div class="lightbox__stage" id="lightboxStage">
+        <img id="lightboxImage" alt="">
+      </div>
+      <figcaption><span id="lightboxName"></span><small>Usa ← → para navegar · F para favorita · Esc para cerrar</small></figcaption>
+    </figure>
+    <button class="lightbox__nav lightbox__nav--next" id="nextPhoto" type="button" aria-label="Fotografía siguiente">›</button>
+    <div class="filmstrip" id="filmstrip" aria-label="Miniaturas de navegación"></div>
+    <div class="slideshow-progress" id="slideshowProgress"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="album.js?v=20260726-2"></script>
+</body>
+</html>
